@@ -1,84 +1,89 @@
-from flask import Flask, jsonify, send_file, request
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 import io
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle, SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
 
 app = Flask(__name__)
 CORS(app)
 
 COMPANY_INFO = {
     "name": "SAMASSA TECHNOLOGIE",
-    "address": "Grand Marché de Kayes, Rue Soundiata Keita",
+    "slogan": "Tout pour l’informatique",
+    "address": "Grand Marché de Kayes, près du 1er arrondissement de la police, Rue Soundiata Keita",
     "phone": "00223 77291931",
-    "email": "samassatechnologie10@gmail.com",
-    "slogan": "Tout pour l'informatique"
+    "email": "samassatechnologie10@gmail.com"
 }
 
 @app.route("/")
 def home():
-    return "SAMASSA Backend est en ligne ✅"
-
-@app.route("/api/clients", methods=["GET"])
-def clients():
-    sample = [
-        {"id":1,"name":"Client A","phone":"+223 70000001"},
-        {"id":2,"name":"Client B","phone":"+223 70000002"}
-    ]
-    return jsonify(sample)
+    return "Backend SAMASSA est en ligne ✅"
 
 @app.route("/api/generate_invoice", methods=["POST"])
 def generate_invoice():
     data = request.json or {}
     invoice_number = data.get("invoice_number", "SAM-001")
     client_name = data.get("client_name", "Client Test")
-    items = data.get("items", [{"description":"Service","qty":1,"price":10000}])
+    items = data.get("items", [{"description":"Service informatique","qty":1,"price":10000}])
+
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    y = height - 50
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, y, COMPANY_INFO["name"])
-    c.setFont("Helvetica", 10)
-    y -= 20
-    c.drawString(50, y, COMPANY_INFO["address"])
-    y -= 15
-    c.drawString(50, y, f"Tél: {COMPANY_INFO['phone']} - {COMPANY_INFO['email']}")
-    y -= 25
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, f"Facture: {invoice_number}")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    c.drawString(50, y, f"Client: {client_name}")
-    y -= 25
-    c.drawString(50, y, "Description")
-    c.drawString(350, y, "Qte")
-    c.drawString(420, y, "Prix U")
-    c.drawString(500, y, "Total")
-    y -= 15
-    total = 0
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # --- En-tête avec logo + infos société
+    try:
+        logo = Image("logo.png", width=80, height=80)
+        elements.append(logo)
+    except:
+        elements.append(Paragraph("<b>[Logo manquant]</b>", styles["Normal"]))
+    elements.append(Paragraph(f"<b>{COMPANY_INFO['name']}</b>", styles["Title"]))
+    elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
+    elements.append(Paragraph(COMPANY_INFO["address"], styles["Normal"]))
+    elements.append(Paragraph(f"Tél: {COMPANY_INFO['phone']} — {COMPANY_INFO['email']}", styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # --- Infos facture
+    elements.append(Paragraph(f"<b>FACTURE N° {invoice_number}</b>", styles["Heading2"]))
+    elements.append(Paragraph(f"Client : {client_name}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    # --- Tableau des articles
+    data_table = [["Description", "Quantité", "Prix Unitaire (F)", "Total (F)"]]
+    total_general = 0
     for it in items:
         desc = it.get("description", "")
         qty = float(it.get("qty", 1))
         price = float(it.get("price", 0))
-        line_total = qty * price
-        total += line_total
-        c.drawString(50, y, desc)
-        c.drawString(350, y, str(int(qty)))
-        c.drawString(420, y, f"{int(price)}")
-        c.drawString(500, y, f"{int(line_total)}")
-        y -= 15
-        if y < 100:
-            c.showPage()
-            y = height - 50
-    y -= 10
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(400, y, "TOTAL:")
-    c.drawString(500, y, f"{int(total)}")
-    c.showPage()
-    c.save()
+        total = qty * price
+        total_general += total
+        data_table.append([desc, f"{int(qty)}", f"{int(price):,}", f"{int(total):,}"])
+
+    data_table.append(["", "", "TOTAL", f"{int(total_general):,}"])
+
+    table = Table(data_table, colWidths=[200, 80, 100, 100])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e3a8a")),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (1,1), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 10),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 30))
+
+    # --- Pied de page
+    elements.append(Paragraph("<b>Merci pour votre confiance !</b>", styles["Normal"]))
+    elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
+
+    doc.build(elements)
     buffer.seek(0)
-    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{invoice_number}.pdf")
+    return send_file(buffer, mimetype="application/pdf",
+                     as_attachment=True, download_name=f"facture_{invoice_number}.pdf")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
