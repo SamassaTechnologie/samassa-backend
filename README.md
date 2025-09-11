@@ -1,1 +1,1 @@
-# Backend SAMASSA mis à jour avec logo et mise en page professionnelle pour les factures.
+# Backend SAMASSA avec Facture + Devis

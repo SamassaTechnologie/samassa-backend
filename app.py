@@ -1,8 +1,8 @@
-from flask import Flask, request, send_file, jsonify
+
+from flask import Flask, request, send_file
 from flask_cors import CORS
 import io
 from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle, SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet
@@ -22,6 +22,7 @@ COMPANY_INFO = {
 def home():
     return "Backend SAMASSA est en ligne ✅"
 
+# --------- FACTURE ---------
 @app.route("/api/generate_invoice", methods=["POST"])
 def generate_invoice():
     data = request.json or {}
@@ -34,7 +35,7 @@ def generate_invoice():
     elements = []
     styles = getSampleStyleSheet()
 
-    # --- En-tête avec logo + infos société
+    # En-tête
     try:
         logo = Image("logo.png", width=80, height=80)
         elements.append(logo)
@@ -42,16 +43,14 @@ def generate_invoice():
         elements.append(Paragraph("<b>[Logo manquant]</b>", styles["Normal"]))
     elements.append(Paragraph(f"<b>{COMPANY_INFO['name']}</b>", styles["Title"]))
     elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
-    elements.append(Paragraph(COMPANY_INFO["address"], styles["Normal"]))
-    elements.append(Paragraph(f"Tél: {COMPANY_INFO['phone']} — {COMPANY_INFO['email']}", styles["Normal"]))
     elements.append(Spacer(1, 20))
 
-    # --- Infos facture
+    # Infos facture
     elements.append(Paragraph(f"<b>FACTURE N° {invoice_number}</b>", styles["Heading2"]))
     elements.append(Paragraph(f"Client : {client_name}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # --- Tableau des articles
+    # Tableau articles
     data_table = [["Description", "Quantité", "Prix Unitaire (F)", "Total (F)"]]
     total_general = 0
     for it in items:
@@ -61,7 +60,6 @@ def generate_invoice():
         total = qty * price
         total_general += total
         data_table.append([desc, f"{int(qty)}", f"{int(price):,}", f"{int(total):,}"])
-
     data_table.append(["", "", "TOTAL", f"{int(total_general):,}"])
 
     table = Table(data_table, colWidths=[200, 80, 100, 100])
@@ -76,7 +74,6 @@ def generate_invoice():
     elements.append(table)
     elements.append(Spacer(1, 30))
 
-    # --- Pied de page
     elements.append(Paragraph("<b>Merci pour votre confiance !</b>", styles["Normal"]))
     elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
 
@@ -84,6 +81,8 @@ def generate_invoice():
     buffer.seek(0)
     return send_file(buffer, mimetype="application/pdf",
                      as_attachment=True, download_name=f"facture_{invoice_number}.pdf")
+
+# --------- DEVIS ---------
 @app.route("/api/generate_devis", methods=["POST"])
 def generate_devis():
     data = request.json or {}
@@ -96,7 +95,7 @@ def generate_devis():
     elements = []
     styles = getSampleStyleSheet()
 
-    # --- En-tête
+    # En-tête
     try:
         logo = Image("logo.png", width=80, height=80)
         elements.append(logo)
@@ -106,12 +105,12 @@ def generate_devis():
     elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
     elements.append(Spacer(1, 20))
 
-    # --- Infos devis
+    # Infos devis
     elements.append(Paragraph(f"<b>DEVIS N° {devis_number}</b>", styles["Heading2"]))
     elements.append(Paragraph(f"Client : {client_name}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # --- Tableau des articles
+    # Tableau articles
     data_table = [["Description", "Quantité", "Prix Unitaire (F)", "Total (F)"]]
     total_general = 0
     for it in items:
@@ -121,12 +120,11 @@ def generate_devis():
         total = qty * price
         total_general += total
         data_table.append([desc, f"{int(qty)}", f"{int(price):,}", f"{int(total):,}"])
-
     data_table.append(["", "", "TOTAL", f"{int(total_general):,}"])
 
     table = Table(data_table, colWidths=[200, 80, 100, 100])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#059669")),  # vert
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#059669")),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('ALIGN', (1,1), (-1,-1), 'CENTER'),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -136,7 +134,6 @@ def generate_devis():
     elements.append(table)
     elements.append(Spacer(1, 30))
 
-    # --- Pied de page
     elements.append(Paragraph("<b>Valable 30 jours à compter de la date d’émission.</b>", styles["Normal"]))
     elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
 
@@ -144,6 +141,6 @@ def generate_devis():
     buffer.seek(0)
     return send_file(buffer, mimetype="application/pdf",
                      as_attachment=True, download_name=f"devis_{devis_number}.pdf")
-    
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
