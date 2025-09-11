@@ -141,6 +141,50 @@ def generate_devis():
     buffer.seek(0)
     return send_file(buffer, mimetype="application/pdf",
                      as_attachment=True, download_name=f"devis_{devis_number}.pdf")
+@app.route("/api/generate_recu", methods=["POST"])
+def generate_recu():
+    data = request.json or {}
+    recu_number = data.get("recu_number", "REC-001")
+    client_name = data.get("client_name", "Client Test")
+    amount = data.get("amount", 10000)
+    payment_method = data.get("payment_method", "Espèces")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # --- En-tête
+    try:
+        logo = Image("logo.png", width=80, height=80)
+        elements.append(logo)
+    except:
+        elements.append(Paragraph("<b>[Logo manquant]</b>", styles["Normal"]))
+    elements.append(Paragraph(f"<b>{COMPANY_INFO['name']}</b>", styles["Title"]))
+    elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # --- Infos reçu
+    elements.append(Paragraph(f"<b>REÇU DE PAIEMENT N° {recu_number}</b>", styles["Heading2"]))
+    elements.append(Paragraph(f"Reçu de : {client_name}", styles["Normal"]))
+    elements.append(Paragraph(f"Montant payé : <b>{int(amount):,} F CFA</b>", styles["Normal"]))
+    elements.append(Paragraph(f"Moyen de paiement : {payment_method}", styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # --- Signature
+    elements.append(Spacer(1, 50))
+    elements.append(Paragraph("Signature & Cachet :", styles["Normal"]))
+
+    # --- Pied
+    elements.append(Spacer(1, 50))
+    elements.append(Paragraph("Merci pour votre règlement.", styles["Normal"]))
+    elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/pdf",
+                     as_attachment=True, download_name=f"recu_{recu_number}.pdf")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
