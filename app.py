@@ -1,4 +1,3 @@
-
 from flask import Flask, request, send_file
 from flask_cors import CORS
 import io
@@ -17,6 +16,14 @@ COMPANY_INFO = {
     "phone": "00223 77291931",
     "email": "samassatechnologie10@gmail.com"
 }
+
+def footer(elements, styles):
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(
+        "SAMASSA TECHNOLOGIE – Tout pour l’informatique – "
+        "Grand Marché de Kayes – 00223 77291931 – samassatechnologie10@gmail.com",
+        styles["Italic"]
+    ))
 
 @app.route("/")
 def home():
@@ -64,7 +71,7 @@ def generate_invoice():
 
     table = Table(data_table, colWidths=[200, 80, 100, 100])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e3a8a")),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e3a8a")),  # bleu
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('ALIGN', (1,1), (-1,-1), 'CENTER'),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -75,7 +82,7 @@ def generate_invoice():
     elements.append(Spacer(1, 30))
 
     elements.append(Paragraph("<b>Merci pour votre confiance !</b>", styles["Normal"]))
-    elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
+    footer(elements, styles)
 
     doc.build(elements)
     buffer.seek(0)
@@ -124,7 +131,7 @@ def generate_devis():
 
     table = Table(data_table, colWidths=[200, 80, 100, 100])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#059669")),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#059669")),  # vert
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('ALIGN', (1,1), (-1,-1), 'CENTER'),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -135,12 +142,14 @@ def generate_devis():
     elements.append(Spacer(1, 30))
 
     elements.append(Paragraph("<b>Valable 30 jours à compter de la date d’émission.</b>", styles["Normal"]))
-    elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
+    footer(elements, styles)
 
     doc.build(elements)
     buffer.seek(0)
     return send_file(buffer, mimetype="application/pdf",
                      as_attachment=True, download_name=f"devis_{devis_number}.pdf")
+
+# --------- REÇU ---------
 @app.route("/api/generate_recu", methods=["POST"])
 def generate_recu():
     data = request.json or {}
@@ -154,7 +163,7 @@ def generate_recu():
     elements = []
     styles = getSampleStyleSheet()
 
-    # --- En-tête
+    # En-tête
     try:
         logo = Image("logo.png", width=80, height=80)
         elements.append(logo)
@@ -164,20 +173,19 @@ def generate_recu():
     elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
     elements.append(Spacer(1, 20))
 
-    # --- Titre reçu
+    # Titre reçu
     elements.append(Paragraph(f"<b>REÇU DE PAIEMENT N° {recu_number}</b>", styles["Heading2"]))
     elements.append(Spacer(1, 12))
 
-    # --- Tableau infos paiement
+    # Tableau infos paiement
     data_table = [
         ["Nom du Client", client_name],
         ["Montant Payé", f"{int(amount):,} F CFA"],
         ["Moyen de Paiement", payment_method]
     ]
-
     table = Table(data_table, colWidths=[150, 250])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#d97706")),  # orange foncé
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#d97706")),  # orange
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
@@ -188,16 +196,13 @@ def generate_recu():
     elements.append(table)
     elements.append(Spacer(1, 30))
 
-    # --- Montant en valeur
+    # Montant en valeur
     elements.append(Paragraph(f"<b style='font-size:16pt;'>Montant reçu : {int(amount):,} F CFA</b>", styles["Normal"]))
     elements.append(Spacer(1, 20))
 
-    # --- Signature
+    # Signature
     elements.append(Spacer(1, 40))
-    signature_table = Table(
-        [["Signature & Cachet"]],
-        colWidths=[200]
-    )
+    signature_table = Table([["Signature & Cachet"]], colWidths=[200])
     signature_table.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1, colors.black),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -207,9 +212,8 @@ def generate_recu():
     elements.append(signature_table)
     elements.append(Spacer(1, 50))
 
-    # --- Pied de page
     elements.append(Paragraph("Merci pour votre règlement.", styles["Normal"]))
-    elements.append(Paragraph("SAMASSA TECHNOLOGIE — Tout pour l’informatique", styles["Italic"]))
+    footer(elements, styles)
 
     doc.build(elements)
     buffer.seek(0)
