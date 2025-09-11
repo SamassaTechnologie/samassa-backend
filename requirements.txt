@@ -1,0 +1,5 @@
+Flask==2.2.5
+Flask-Cors==3.0.10
+gunicorn==20.1.0
+SQLAlchemy==2.0.19
+reportlab==4.0.7
