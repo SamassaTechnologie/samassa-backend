@@ -10,12 +10,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 app = Flask(__name__)
 CORS(app)
 
-# ---------- CONFIG BASE DE DONNÉES ----------
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///samassa.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
-# ---------- INFOS ENTREPRISE ----------
 COMPANY_INFO = {
     "name": "SAMASSA TECHNOLOGIE",
     "slogan": "Tout pour l’informatique",
@@ -24,7 +22,6 @@ COMPANY_INFO = {
     "email": "samassatechnologie10@gmail.com"
 }
 
-# ---------- MODÈLES ----------
 class Facture(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero = db.Column(db.String(50), unique=True, nullable=False)
@@ -44,7 +41,6 @@ class Recu(db.Model):
     montant = db.Column(db.Integer, nullable=False)
     moyen = db.Column(db.String(50), nullable=False)
 
-# ---------- UTILS ----------
 def footer(elements, styles):
     elements.append(Spacer(1, 20))
     elements.append(Paragraph(
@@ -53,12 +49,10 @@ def footer(elements, styles):
         styles["Italic"]
     ))
 
-# ---------- ROUTES GÉNÉRATRICES (PDF) ----------
 @app.route("/")
 def home():
     return "Backend SAMASSA avec base SQLite est en ligne ✅"
 
-# --------- API FACTURES ---------
 @app.route("/api/factures", methods=["POST"])
 def add_facture():
     data = request.json
@@ -72,7 +66,6 @@ def list_factures():
     factures = Facture.query.all()
     return jsonify([{"id": f.id, "numero": f.numero, "client": f.client, "total": f.total} for f in factures])
 
-# --------- API DEVIS ---------
 @app.route("/api/devis", methods=["POST"])
 def add_devis():
     data = request.json
@@ -86,7 +79,6 @@ def list_devis():
     devis = Devis.query.all()
     return jsonify([{"id": d.id, "numero": d.numero, "client": d.client, "total": d.total} for d in devis])
 
-# --------- API REÇUS ---------
 @app.route("/api/recus", methods=["POST"])
 def add_recu():
     data = request.json
@@ -100,7 +92,6 @@ def list_recus():
     recus = Recu.query.all()
     return jsonify([{"id": r.id, "numero": r.numero, "client": r.client, "montant": r.montant, "moyen": r.moyen} for r in recus])
 
-# ---------- INITIALISER LA DB ----------
 with app.app_context():
     db.create_all()
 
