@@ -1,5 +1,6 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 import io
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -9,6 +10,12 @@ from reportlab.lib.styles import getSampleStyleSheet
 app = Flask(__name__)
 CORS(app)
 
+# ---------- CONFIG BASE DE DONNÉES ----------
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///samassa.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+
+# ---------- INFOS ENTREPRISE ----------
 COMPANY_INFO = {
     "name": "SAMASSA TECHNOLOGIE",
     "slogan": "Tout pour l’informatique",
@@ -17,6 +24,27 @@ COMPANY_INFO = {
     "email": "samassatechnologie10@gmail.com"
 }
 
+# ---------- MODÈLES ----------
+class Facture(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(50), unique=True, nullable=False)
+    client = db.Column(db.String(120), nullable=False)
+    total = db.Column(db.Integer, nullable=False)
+
+class Devis(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(50), unique=True, nullable=False)
+    client = db.Column(db.String(120), nullable=False)
+    total = db.Column(db.Integer, nullable=False)
+
+class Recu(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(50), unique=True, nullable=False)
+    client = db.Column(db.String(120), nullable=False)
+    montant = db.Column(db.Integer, nullable=False)
+    moyen = db.Column(db.String(50), nullable=False)
+
+# ---------- UTILS ----------
 def footer(elements, styles):
     elements.append(Spacer(1, 20))
     elements.append(Paragraph(
@@ -25,200 +53,56 @@ def footer(elements, styles):
         styles["Italic"]
     ))
 
+# ---------- ROUTES GÉNÉRATRICES (PDF) ----------
 @app.route("/")
 def home():
-    return "Backend SAMASSA est en ligne ✅"
+    return "Backend SAMASSA avec base SQLite est en ligne ✅"
 
-# --------- FACTURE ---------
-@app.route("/api/generate_invoice", methods=["POST"])
-def generate_invoice():
-    data = request.json or {}
-    invoice_number = data.get("invoice_number", "SAM-001")
-    client_name = data.get("client_name", "Client Test")
-    items = data.get("items", [{"description":"Service informatique","qty":1,"price":10000}])
+# --------- API FACTURES ---------
+@app.route("/api/factures", methods=["POST"])
+def add_facture():
+    data = request.json
+    facture = Facture(numero=data["numero"], client=data["client"], total=data["total"])
+    db.session.add(facture)
+    db.session.commit()
+    return {"message": "Facture enregistrée", "id": facture.id}
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = []
-    styles = getSampleStyleSheet()
+@app.route("/api/factures", methods=["GET"])
+def list_factures():
+    factures = Facture.query.all()
+    return jsonify([{"id": f.id, "numero": f.numero, "client": f.client, "total": f.total} for f in factures])
 
-    # En-tête
-    try:
-        logo = Image("logo.png", width=80, height=80)
-        elements.append(logo)
-    except:
-        elements.append(Paragraph("<b>[Logo manquant]</b>", styles["Normal"]))
-    elements.append(Paragraph(f"<b>{COMPANY_INFO['name']}</b>", styles["Title"]))
-    elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
-    elements.append(Spacer(1, 20))
+# --------- API DEVIS ---------
+@app.route("/api/devis", methods=["POST"])
+def add_devis():
+    data = request.json
+    devis = Devis(numero=data["numero"], client=data["client"], total=data["total"])
+    db.session.add(devis)
+    db.session.commit()
+    return {"message": "Devis enregistré", "id": devis.id}
 
-    # Infos facture
-    elements.append(Paragraph(f"<b>FACTURE N° {invoice_number}</b>", styles["Heading2"]))
-    elements.append(Paragraph(f"Client : {client_name}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
+@app.route("/api/devis", methods=["GET"])
+def list_devis():
+    devis = Devis.query.all()
+    return jsonify([{"id": d.id, "numero": d.numero, "client": d.client, "total": d.total} for d in devis])
 
-    # Tableau articles
-    data_table = [["Description", "Quantité", "Prix Unitaire (F)", "Total (F)"]]
-    total_general = 0
-    for it in items:
-        desc = it.get("description", "")
-        qty = float(it.get("qty", 1))
-        price = float(it.get("price", 0))
-        total = qty * price
-        total_general += total
-        data_table.append([desc, f"{int(qty)}", f"{int(price):,}", f"{int(total):,}"])
-    data_table.append(["", "", "TOTAL", f"{int(total_general):,}"])
+# --------- API REÇUS ---------
+@app.route("/api/recus", methods=["POST"])
+def add_recu():
+    data = request.json
+    recu = Recu(numero=data["numero"], client=data["client"], montant=data["montant"], moyen=data["moyen"])
+    db.session.add(recu)
+    db.session.commit()
+    return {"message": "Reçu enregistré", "id": recu.id}
 
-    table = Table(data_table, colWidths=[200, 80, 100, 100])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e3a8a")),  # bleu
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('ALIGN', (1,1), (-1,-1), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 10),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 30))
+@app.route("/api/recus", methods=["GET"])
+def list_recus():
+    recus = Recu.query.all()
+    return jsonify([{"id": r.id, "numero": r.numero, "client": r.client, "montant": r.montant, "moyen": r.moyen} for r in recus])
 
-    elements.append(Paragraph("<b>Merci pour votre confiance !</b>", styles["Normal"]))
-    footer(elements, styles)
-
-    doc.build(elements)
-    buffer.seek(0)
-    return send_file(buffer, mimetype="application/pdf",
-                     as_attachment=True, download_name=f"facture_{invoice_number}.pdf")
-
-# --------- DEVIS ---------
-@app.route("/api/generate_devis", methods=["POST"])
-def generate_devis():
-    data = request.json or {}
-    devis_number = data.get("devis_number", "DEV-001")
-    client_name = data.get("client_name", "Client Test")
-    items = data.get("items", [{"description":"Service proposé","qty":1,"price":10000}])
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = []
-    styles = getSampleStyleSheet()
-
-    # En-tête
-    try:
-        logo = Image("logo.png", width=80, height=80)
-        elements.append(logo)
-    except:
-        elements.append(Paragraph("<b>[Logo manquant]</b>", styles["Normal"]))
-    elements.append(Paragraph(f"<b>{COMPANY_INFO['name']}</b>", styles["Title"]))
-    elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
-    elements.append(Spacer(1, 20))
-
-    # Infos devis
-    elements.append(Paragraph(f"<b>DEVIS N° {devis_number}</b>", styles["Heading2"]))
-    elements.append(Paragraph(f"Client : {client_name}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
-
-    # Tableau articles
-    data_table = [["Description", "Quantité", "Prix Unitaire (F)", "Total (F)"]]
-    total_general = 0
-    for it in items:
-        desc = it.get("description", "")
-        qty = float(it.get("qty", 1))
-        price = float(it.get("price", 0))
-        total = qty * price
-        total_general += total
-        data_table.append([desc, f"{int(qty)}", f"{int(price):,}", f"{int(total):,}"])
-    data_table.append(["", "", "TOTAL", f"{int(total_general):,}"])
-
-    table = Table(data_table, colWidths=[200, 80, 100, 100])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#059669")),  # vert
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('ALIGN', (1,1), (-1,-1), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 10),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 30))
-
-    elements.append(Paragraph("<b>Valable 30 jours à compter de la date d’émission.</b>", styles["Normal"]))
-    footer(elements, styles)
-
-    doc.build(elements)
-    buffer.seek(0)
-    return send_file(buffer, mimetype="application/pdf",
-                     as_attachment=True, download_name=f"devis_{devis_number}.pdf")
-
-# --------- REÇU ---------
-@app.route("/api/generate_recu", methods=["POST"])
-def generate_recu():
-    data = request.json or {}
-    recu_number = data.get("recu_number", "REC-001")
-    client_name = data.get("client_name", "Client Test")
-    amount = data.get("amount", 10000)
-    payment_method = data.get("payment_method", "Espèces")
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = []
-    styles = getSampleStyleSheet()
-
-    # En-tête
-    try:
-        logo = Image("logo.png", width=80, height=80)
-        elements.append(logo)
-    except:
-        elements.append(Paragraph("<b>[Logo manquant]</b>", styles["Normal"]))
-    elements.append(Paragraph(f"<b>{COMPANY_INFO['name']}</b>", styles["Title"]))
-    elements.append(Paragraph(COMPANY_INFO["slogan"], styles["Normal"]))
-    elements.append(Spacer(1, 20))
-
-    # Titre reçu
-    elements.append(Paragraph(f"<b>REÇU DE PAIEMENT N° {recu_number}</b>", styles["Heading2"]))
-    elements.append(Spacer(1, 12))
-
-    # Tableau infos paiement
-    data_table = [
-        ["Nom du Client", client_name],
-        ["Montant Payé", f"{int(amount):,} F CFA"],
-        ["Moyen de Paiement", payment_method]
-    ]
-    table = Table(data_table, colWidths=[150, 250])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#d97706")),  # orange
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,1), (-1,-1), 12),
-        ('BOTTOMPADDING', (0,0), (-1,0), 10),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 30))
-
-    # Montant en valeur
-    elements.append(Paragraph(f"<b style='font-size:16pt;'>Montant reçu : {int(amount):,} F CFA</b>", styles["Normal"]))
-    elements.append(Spacer(1, 20))
-
-    # Signature
-    elements.append(Spacer(1, 40))
-    signature_table = Table([["Signature & Cachet"]], colWidths=[200])
-    signature_table.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 1, colors.black),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('FONTSIZE', (0,0), (-1,-1), 12)
-    ]))
-    elements.append(signature_table)
-    elements.append(Spacer(1, 50))
-
-    elements.append(Paragraph("Merci pour votre règlement.", styles["Normal"]))
-    footer(elements, styles)
-
-    doc.build(elements)
-    buffer.seek(0)
-    return send_file(buffer, mimetype="application/pdf",
-                     as_attachment=True, download_name=f"recu_{recu_number}.pdf")
+# ---------- INITIALISER LA DB ----------
+with app.app_context():
+    db.create_all()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
