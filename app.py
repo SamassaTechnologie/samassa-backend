@@ -1,162 +1,153 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-import io
-from reportlab.pdfgen import canvas
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
-# Config SQLite
+# SQLite config (file samassa.db will be created in the app folder)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///samassa.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
-# -------------------------------
-# MODELES
-# -------------------------------
+# ---------- Models ----------
 class Facture(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(50), unique=True)
-    client = db.Column(db.String(100))
-    total = db.Column(db.Float)
+    numero = db.Column(db.String(64), unique=True, nullable=False)
+    client = db.Column(db.String(200), nullable=False)
+    total = db.Column(db.Float, nullable=False)
+    items = db.Column(db.Text)  # JSON string of items
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Devis(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(50), unique=True)
-    client = db.Column(db.String(100))
-    total = db.Column(db.Float)
+    numero = db.Column(db.String(64), unique=True, nullable=False)
+    client = db.Column(db.String(200), nullable=False)
+    total = db.Column(db.Float, nullable=False)
+    items = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Recu(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(50), unique=True)
-    client = db.Column(db.String(100))
-    montant = db.Column(db.Float)
-    moyen = db.Column(db.String(50))
+    numero = db.Column(db.String(64), unique=True, nullable=False)
+    client = db.Column(db.String(200), nullable=False)
+    montant = db.Column(db.Float, nullable=False)
+    moyen = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+# ---------- Initialize DB ----------
 with app.app_context():
     db.create_all()
 
-# -------------------------------
-# ROUTES FACTURES
-# -------------------------------
+# ---------- Helper ----------
+def ok(data=None, message="OK"):
+    payload = {"message": message}
+    if data is not None:
+        payload["data"] = data
+    return jsonify(payload)
+
+# ---------- Factures endpoints ----------
 @app.route("/api/factures", methods=["GET"])
-def get_factures():
-    factures = Facture.query.all()
-    return jsonify([{"id": f.id, "numero": f.numero, "client": f.client, "total": f.total} for f in factures])
+def list_factures():
+    rows = Facture.query.order_by(Facture.created_at.desc()).all()
+    return jsonify([{
+        "id": r.id, "numero": r.numero, "client": r.client,
+        "total": r.total, "items": r.items, "created_at": r.created_at.isoformat()
+    } for r in rows])
 
 @app.route("/api/factures", methods=["POST"])
-def add_facture():
-    data = request.json
-    new_facture = Facture(numero=data["numero"], client=data["client"], total=data["total"])
-    db.session.add(new_facture)
+def create_facture():
+    data = request.json or {}
+    # minimal validation
+    numero = data.get("numero")
+    client = data.get("client")
+    total = float(data.get("total", 0))
+    items = data.get("items", "[]")
+    if not numero or not client:
+        return jsonify({"error": "numero and client required"}), 400
+    f = Facture(numero=numero, client=client, total=total, items=str(items))
+    db.session.add(f)
     db.session.commit()
-    return {"message": "Facture ajoutée"}
+    return ok({"id": f.id}, "Facture created")
 
 @app.route("/api/factures/<int:id>", methods=["DELETE"])
 def delete_facture(id):
-    facture = Facture.query.get(id)
-    if facture:
-        db.session.delete(facture)
-        db.session.commit()
-        return {"message": "Facture supprimée"}
-    return {"error": "Facture introuvable"}, 404
+    f = Facture.query.get(id)
+    if not f:
+        return jsonify({"error": "Not found"}), 404
+    db.session.delete(f)
+    db.session.commit()
+    return ok(message="Facture deleted")
 
-@app.route("/api/generate_invoice", methods=["POST"])
-def generate_invoice():
-    data = request.json
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer)
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(100, 800, f"FACTURE N° {data['numero']}")
-    p.setFont("Helvetica", 12)
-    p.drawString(100, 770, f"Client : {data['client']}")
-    p.drawString(100, 750, f"Total : {data['total']} F CFA")
-    p.save()
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name=f"facture_{data['numero']}.pdf", mimetype="application/pdf")
-
-# -------------------------------
-# ROUTES DEVIS
-# -------------------------------
+# ---------- Devis endpoints ----------
 @app.route("/api/devis", methods=["GET"])
-def get_devis():
-    devis = Devis.query.all()
-    return jsonify([{"id": d.id, "numero": d.numero, "client": d.client, "total": d.total} for d in devis])
+def list_devis():
+    rows = Devis.query.order_by(Devis.created_at.desc()).all()
+    return jsonify([{
+        "id": r.id, "numero": r.numero, "client": r.client,
+        "total": r.total, "items": r.items, "created_at": r.created_at.isoformat()
+    } for r in rows])
 
 @app.route("/api/devis", methods=["POST"])
-def add_devis():
-    data = request.json
-    new_devis = Devis(numero=data["numero"], client=data["client"], total=data["total"])
-    db.session.add(new_devis)
+def create_devis():
+    data = request.json or {}
+    numero = data.get("numero")
+    client = data.get("client")
+    total = float(data.get("total", 0))
+    items = data.get("items", "[]")
+    if not numero or not client:
+        return jsonify({"error": "numero and client required"}), 400
+    d = Devis(numero=numero, client=client, total=total, items=str(items))
+    db.session.add(d)
     db.session.commit()
-    return {"message": "Devis ajouté"}
+    return ok({"id": d.id}, "Devis created")
 
 @app.route("/api/devis/<int:id>", methods=["DELETE"])
 def delete_devis(id):
-    devis = Devis.query.get(id)
-    if devis:
-        db.session.delete(devis)
-        db.session.commit()
-        return {"message": "Devis supprimé"}
-    return {"error": "Devis introuvable"}, 404
+    d = Devis.query.get(id)
+    if not d:
+        return jsonify({"error": "Not found"}), 404
+    db.session.delete(d)
+    db.session.commit()
+    return ok(message="Devis deleted")
 
-@app.route("/api/generate_devis", methods=["POST"])
-def generate_devis():
-    data = request.json
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer)
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(100, 800, f"DEVIS N° {data['numero']}")
-    p.setFont("Helvetica", 12)
-    p.drawString(100, 770, f"Client : {data['client']}")
-    p.drawString(100, 750, f"Total : {data['total']} F CFA")
-    p.save()
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name=f"devis_{data['numero']}.pdf", mimetype="application/pdf")
-
-# -------------------------------
-# ROUTES RECUS
-# -------------------------------
+# ---------- Recus endpoints ----------
 @app.route("/api/recus", methods=["GET"])
-def get_recus():
-    recus = Recu.query.all()
-    return jsonify([{"id": r.id, "numero": r.numero, "client": r.client, "montant": r.montant, "moyen": r.moyen} for r in recus])
+def list_recus():
+    rows = Recu.query.order_by(Recu.created_at.desc()).all()
+    return jsonify([{
+        "id": r.id, "numero": r.numero, "client": r.client,
+        "montant": r.montant, "moyen": r.moyen, "created_at": r.created_at.isoformat()
+    } for r in rows])
 
 @app.route("/api/recus", methods=["POST"])
-def add_recu():
-    data = request.json
-    new_recu = Recu(numero=data["numero"], client=data["client"], montant=data["montant"], moyen=data["moyen"])
-    db.session.add(new_recu)
+def create_recu():
+    data = request.json or {}
+    numero = data.get("numero")
+    client = data.get("client")
+    montant = float(data.get("montant", 0))
+    moyen = data.get("moyen", "")
+    if not numero or not client:
+        return jsonify({"error": "numero and client required"}), 400
+    r = Recu(numero=numero, client=client, montant=montant, moyen=moyen)
+    db.session.add(r)
     db.session.commit()
-    return {"message": "Reçu ajouté"}
+    return ok({"id": r.id}, "Reçu created")
 
 @app.route("/api/recus/<int:id>", methods=["DELETE"])
 def delete_recu(id):
-    recu = Recu.query.get(id)
-    if recu:
-        db.session.delete(recu)
-        db.session.commit()
-        return {"message": "Reçu supprimé"}
-    return {"error": "Reçu introuvable"}, 404
+    r = Recu.query.get(id)
+    if not r:
+        return jsonify({"error": "Not found"}), 404
+    db.session.delete(r)
+    db.session.commit()
+    return ok(message="Reçu deleted")
 
-@app.route("/api/generate_recu", methods=["POST"])
-def generate_recu():
-    data = request.json
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer)
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(100, 800, f"REÇU N° {data['numero']}")
-    p.setFont("Helvetica", 12)
-    p.drawString(100, 770, f"Client : {data['client']}")
-    p.drawString(100, 750, f"Montant : {data['montant']} F CFA")
-    p.drawString(100, 730, f"Moyen : {data['moyen']}")
-    p.save()
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name=f"recu_{data['numero']}.pdf", mimetype="application/pdf")
+# ---------- Health ----------
+@app.route("/", methods=["GET"])
+def home():
+    return "SAMASSA backend (data API) is running."
 
-# -------------------------------
-# MAIN
-# -------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
